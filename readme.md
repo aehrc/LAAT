@@ -1,5 +1,7 @@
 
-# A Label Attention Model for ICD Coding from Clinical Text
+# A Label Attention Model for ICD Coding from Clinical Text <a href="https://twitter.com/intent/tweet?text=LAAT%20%28A%20Label%20Attention%20Model%20for%20ICD%20Coding%20from%20Clinical%20Text%29%20Code:&url=https%3A%2F%2Fgithub.com%2Faehrc%2FLAAT"><img alt="Twitter" src="https://img.shields.io/twitter/url?style=social&url=https%3A%2F%2Ftwitter.com%2F"></a>  
+  
+<img alt="GitHub top language" src="https://img.shields.io/github/languages/top/aehrc/LAAT"> <a href="https://github.com/aehrc/LAAT/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/aehrc/LAAT"></a> <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/aehrc/LAAT"> <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/aehrc/LAAT"> <a href="https://github.com/aehrc/LAAT/network"><img alt="GitHub forks" src="https://img.shields.io/github/forks/aehrc/LAAT"></a> <a href="https://github.com/aehrc/LAAT/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/aehrc/LAAT"></a>    
 
 This project provides the code for our JICAI 2020 [A Label Attention Model for ICD Coding from Clinical Text](https://arxiv.org/abs/2007.06351) paper.
 
@@ -36,7 +38,7 @@ The general architecture and experimental results can be found in our [paper](ht
 
 Run `pip install -r requirements.txt` to install the required libraries
 
-- Run `python3` and run `import nltk` and `nltk.download('punkt')` for tokenization 
+Run `python3` and run `import nltk` and `nltk.download('punkt')` for tokenization 
 
 ### Data preparation
 
@@ -93,5 +95,3 @@ python -m src.run \
     --hidden_size 512 
 ```
 
-
-**Disclaim:** _The results reported in our paper are averaged over ten (10) randomly initialised runs. Re-run the code might lead to _**slightly**_ different results._
