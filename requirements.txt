@@ -1,0 +1,9 @@
+pytorch==1.4.0
+scikit-learn==0.23.1
+numpy==1.16.3
+scipy==1.2.1
+pandas==0.24.2
+tqdm==4.31.1
+nltk==3.4.1
+psycopg2==2.7.7
+gensim==3.6.0
