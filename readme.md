@@ -32,7 +32,7 @@ The general architecture and experimental results can be found in our [paper](ht
 - scipy==1.2.1
 - pandas==0.24.2
 - tqdm==4.31.1
-- nltk==3.4.1
+- nltk>=3.4.5
 - psycopg2==2.7.7
 - gensim==3.6.0
 
