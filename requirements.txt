@@ -7,3 +7,4 @@ tqdm==4.31.1
 nltk>=3.4.5
 psycopg2==2.7.7
 gensim==3.6.0
+transformers==2.11.0

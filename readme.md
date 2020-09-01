@@ -35,6 +35,7 @@ The general architecture and experimental results can be found in our [paper](ht
 - nltk>=3.4.5
 - psycopg2==2.7.7
 - gensim==3.6.0
+- transformers==2.11.0
 
 Run `pip install -r requirements.txt` to install the required libraries
 
