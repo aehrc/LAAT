@@ -26,7 +26,7 @@ The general architecture and experimental results can be found in our [paper](ht
 ### Requirements
 
 - python>=3.6
-- pytorch==1.4.0
+- torch==1.4.0
 - scikit-learn==0.23.1
 - numpy==1.16.3
 - scipy==1.2.1

@@ -5,7 +5,7 @@ from src.models.cnn import *
 
 def create_args_parser():
     parser = argparse.ArgumentParser(description="DNN for Text Classifications")
-    parser.add_argument("--problem_name", type=str, default="mimiciii_single_full", required=False,
+    parser.add_argument("--problem_name", type=str, default="mimic-iii_single_full", required=False,
                         help="The problem name is used to load the configuration from config.json")
 
     parser.add_argument('--batch_size', type=int, default=8)
