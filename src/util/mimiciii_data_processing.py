@@ -2,9 +2,10 @@
 # set the connection to PostgreSQL at Line 139
 
 import pandas as pd
-import psycopg2
+# import psycopg2
 import numpy as np
 from src.util.preprocessing import RECORD_SEPARATOR
+# from preprocessing import RECORD_SEPARATOR
 import operator
 import os
 
@@ -22,6 +23,13 @@ n_not_found = 0
 
 label_count_dict = dict()
 n = 50
+
+noteevents = pd.read_csv("../../data/mimicdata/mimic3/NOTEEVENTS.csv")
+procedures_icd = pd.read_csv('../../data/mimicdata/mimic3/PROCEDURES_ICD.csv')
+diagnoses_icd = pd.read_csv('../../data/mimicdata/mimic3/DIAGNOSES_ICD.csv')
+
+# discharge_summaries = ps.sqldf("SELECT subject_id, text FROM noteevents WHERE category='Discharge summary' ORDER BY charttime, chartdate, description desc")
+discharge_summaries = noteevents.query("CATEGORY == 'Discharge summary'")
 
 
 def read_admission_ids(train_file, valid_file, test_file, outdir, top_n_labels=None):
@@ -52,11 +60,12 @@ def read_admission_ids(train_file, valid_file, test_file, outdir, top_n_labels=N
     test_writer = csv.DictWriter(test_file, fieldnames=output_fields)
     test_writer.writeheader()
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SET work_mem TO '1 GB';")
-    cur.execute("SET statement_timeout = 500000;")
-    cur.execute("SET idle_in_transaction_session_timeout = 500000;")
+    # conn = get_connection()
+    # cur = conn.cursor()
+    # cur.execute("SET work_mem TO '1 GB';")
+    # cur.execute("SET statement_timeout = 500000;")
+    # cur.execute("SET idle_in_transaction_session_timeout = 500000;")
+    cur = None
 
     n_not_found = 0
     process_df(df_train, training_writer, cur, top_n_labels)
@@ -133,24 +142,29 @@ def process_df(df, writer, cur, top_n_labels):
                  len(unique_full_labels)))
 
 
-def get_connection():
-    global conn
-    if conn is None:
-        conn = psycopg2.connect(database="mimic", user="username", password="password", host="localhost")
-        # conn = psycopg2.connect(database="mimic", user="autocode", password="secret", host="localhost")
-    return conn
+# def get_connection():
+#     global conn
+#     if conn is None:
+#         conn = psycopg2.connect(database="mimic", user="username", password="password", host="localhost")
+#         # conn = psycopg2.connect(database="mimic", user="autocode", password="secret", host="localhost")
+#     return conn
 
 
 def get_text_labels(admission_id, cur, top_n_labels):
-    select_statement = "SELECT subject_id, text FROM mimiciii.noteevents WHERE hadm_id={} " \
-                       "and category='Discharge summary' ORDER BY charttime, chartdate, description desc".format(admission_id)
-    cur.execute(select_statement)
+    
+    # select_statement = "SELECT subject_id, text FROM noteevents WHERE hadm_id={} " \
+    #                    "and category='Discharge summary' ORDER BY charttime, chartdate, description desc".format(admission_id)
+    # cur = ps.sqldf(select_statement)
+
+    cur = discharge_summaries.query(f"HADM_ID == {admission_id}").sort_values(['CHARTTIME', 'CHARTDATE', 'DESCRIPTION'], ascending=False)
+    cur = cur[['SUBJECT_ID', 'TEXT']]
+
     global n_not_found
 
     text = []
     patient_id = None
     unique = set()
-    for row in cur:
+    for _, row in cur.iterrows():
         if row[1] is not None:
             if type(row[1]) == float:
                 continue
@@ -161,13 +175,17 @@ def get_text_labels(admission_id, cur, top_n_labels):
                 unique.add(row[1])
             patient_id = row[0]
 
-    select_statement = "SELECT icd9_code FROM mimiciii.diagnoses_icd WHERE hadm_id={} ORDER BY seq_num".format(admission_id)
-    cur.execute(select_statement)
+    # select_statement = "SELECT icd9_code FROM diagnoses_icd WHERE hadm_id={} ORDER BY seq_num".format(admission_id)
+    # cur = ps.sqldf(select_statement)
+    cur = diagnoses_icd.query(f"HADM_ID == {admission_id}").sort_values("SEQ_NUM")
+    cur = cur[['ICD9_CODE']]
     diag_chapter_labels, diag_three_character_labels, diag_full_labels = process_codes(cur, True, top_n_labels)
 
-    select_statement = "SELECT icd9_code FROM mimiciii.procedures_icd WHERE hadm_id={} ORDER BY seq_num".format(
-        admission_id)
-    cur.execute(select_statement)
+    # select_statement = "SELECT icd9_code FROM procedures_icd WHERE hadm_id={} ORDER BY seq_num".format(
+    #     admission_id)
+    # cur = ps.sqldf(select_statement)
+    cur = procedures_icd.query(f"HADM_ID == {admission_id}").sort_values("SEQ_NUM")
+    cur = cur[['ICD9_CODE']]
     proc_chapter_labels, proc_three_character_labels, proc_full_labels = process_codes(cur, False, top_n_labels)
 
     for lb in proc_full_labels:
@@ -207,22 +225,22 @@ def get_text_labels(admission_id, cur, top_n_labels):
 
 def process_codes(cur, is_diagnosis, top_n_labels):
     chapter_labels, three_character_labels, full_labels = [], [], []
-    for row in cur:
+    for _, row in cur.iterrows():
         if row[0] is not None:
             if type(row[0]) == float and np.isnan(row[0]):
                 continue
-            if top_n_labels is not None and reformat(row[0], is_diagnosis, FULL) not in top_n_labels:
+            if top_n_labels is not None and reformat(str(row[0]), is_diagnosis, FULL) not in top_n_labels:
                 continue
 
-            chapter_label = reformat(row[0], is_diagnosis, CHAPTER)
+            chapter_label = reformat(str(row[0]), is_diagnosis, CHAPTER)
             if chapter_label is not None:
                 chapter_labels.append(str(chapter_label))
 
-            three_character_label = reformat(row[0], is_diagnosis, THREE_CHARACTER)
+            three_character_label = reformat(str(row[0]), is_diagnosis, THREE_CHARACTER)
             if three_character_label is not None:
                 three_character_labels.append(str(three_character_label))
 
-            full_label = reformat(row[0], is_diagnosis, FULL)
+            full_label = reformat(str(row[0]), is_diagnosis, FULL)
             if full_label is not None:
                 full_labels.append(str(full_label))
 
@@ -378,16 +396,16 @@ def reformat(code, is_diag, level=FULL):
 
 if __name__ == "__main__":
     top_n_labels = read_admission_ids(
-        train_file="data/mimicdata/mimic3/train_full_hadm_ids.csv",
-        valid_file="data/mimicdata/mimic3/dev_full_hadm_ids.csv",
-        test_file="data/mimicdata/mimic3/test_full_hadm_ids.csv",
-        outdir="data/mimicdata/mimic3/full/")
+        train_file="../../data/mimicdata/mimic3/train_full_hadm_ids.csv",
+        valid_file="../../data/mimicdata/mimic3/dev_full_hadm_ids.csv",
+        test_file="../../data/mimicdata/mimic3/test_full_hadm_ids.csv",
+        outdir="../../data/mimicdata/mimic3/full/")
 
     read_admission_ids(
-        train_file="data/mimicdata/mimic3/train_50_hadm_ids.csv",
-        valid_file="data/mimicdata/mimic3/dev_50_hadm_ids.csv",
-        test_file="data/mimicdata/mimic3/test_50_hadm_ids.csv",
-        outdir="data/mimicdata/mimic3/50/",
+        train_file="../../data/mimicdata/mimic3/train_50_hadm_ids.csv",
+        valid_file="../../data/mimicdata/mimic3/dev_50_hadm_ids.csv",
+        test_file="../../data/mimicdata/mimic3/test_50_hadm_ids.csv",
+        outdir="../../data/mimicdata/mimic3/50/",
         top_n_labels=top_n_labels)
 
 
