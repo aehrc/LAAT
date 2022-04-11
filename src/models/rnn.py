@@ -94,7 +94,7 @@ class RNN(nn.Module):
             embeds = self.dropout(embeds)
 
         self.rnn.flatten_parameters()
-        embeds = pack_padded_sequence(embeds, lengths, batch_first=True)
+        embeds = pack_padded_sequence(embeds, lengths.cpu(), batch_first=True)
 
         rnn_output, hidden = self.rnn(embeds, hidden)
         if self.rnn_model.lower() == "lstm":

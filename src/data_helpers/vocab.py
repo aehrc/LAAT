@@ -195,14 +195,14 @@ class Vocab(object):
         else:
             model = Word2Vec.load(self.word_embedding_file)
 
-        embedding_size = model["and"].size
+        embedding_size = model.wv["and"].size
         unknown_vec = np.random.uniform(-0.25, 0.25, embedding_size)
 
         embeddings = [unknown_vec] * (self.n_words())
         embeddings[0] = np.zeros(embedding_size)
         for word in self.word2index:
             try:
-                embeddings[self.word2index[word]] = model[word]
+                embeddings[self.word2index[word]] = model.wv[word]
             except:
                 # self.word2index[word] = self.word2index[self.UNK_TOKEN]
                 pass
