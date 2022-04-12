@@ -167,7 +167,7 @@ class Decoder(nn.Module):
             else:
                 self.query_fc_dict = nn.ModuleDict()
                 for i in range(len(Y)):
-                    self.query_fc_dict[str(i)] = nn.Linear(input_size + args.hyperbolic_dim, input_size)
+                    self.query_fc_dict[str(i)] = nn.Linear(args.d_a + args.hyperbolic_dim, args.d_a)
             
             # build hyperbolic embedding matrix
             self.hyperbolic_emb_dict = {}
