@@ -50,6 +50,13 @@
     "id_col_name": "Admission_Id",
     "label_col_names": ["Full_Labels"],
     "text_col_name": "Text"
+  },
+  "mimic-iii_cl_full": {
+    "cache_dir": "/scratch/gobi2/wren/icd/laat/cached_data",
+    "data_dir": "/scratch/gobi2/wren/icd/laat/data/full",
+    "id_col_name": "Admission_Id",
+    "label_col_names": ["Full_Labels"],
+    "text_col_name": "Text"
   }
 
 }
