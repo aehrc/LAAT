@@ -9,6 +9,7 @@ from src.trainer import Trainer
 from src.evaluator import Evaluator
 from src.util.icd_hierarchy import generate_code_hierarchy
 from src.args_parser import *
+from src.models.loss import AsymmetricLoss
 import pickle
 import pprint
 
@@ -172,7 +173,12 @@ def _train_model(train_data, valid_data, test_data,
                                                           patience=args.lr_scheduler_patience,
                                                           min_lr=0.0001)
     if args.multilabel:
-        criterions = [nn.BCEWithLogitsLoss() for _ in range(vocab.n_level())]
+        if args.loss == "BCE":
+            criterions = [nn.BCEWithLogitsLoss() for _ in range(vocab.n_level())]
+        elif args.loss == "ASL":
+            asl_config = [float(c) for c in args.asl_config.split(',')]
+            criterions = [AsymmetricLoss(gamma_neg=asl_config[0], gamma_pos=asl_config[1],
+                                         clip=asl_config[2], reduction=args.asl_reduction)]
     else:
         criterions = [nn.CrossEntropyLoss() for _ in range(vocab.n_level())]
 

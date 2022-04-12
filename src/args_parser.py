@@ -80,14 +80,14 @@ def create_args_parser():
     parser.add_argument("--penalisation_coeff", type=float, default=0.01)
 
     # HiCu
-    parser.add_argument("-depth", type=int, default=5)
-    parser.add_argument("-decoder", type=str, choices=['HierarchicalHyperbolic', 'CodeTitleHierarchicalHyperbolic', 'Hierarchical',
+    parser.add_argument("--depth", type=int, default=5)
+    parser.add_argument("--decoder", type=str, choices=['HierarchicalHyperbolic', 'CodeTitleHierarchicalHyperbolic', 'Hierarchical',
                                                    'CodeTitle', 'RandomlyInitialized'], default='HierarchicalHyperbolic')
-    parser.add_argument("-hyperbolic_dim", type=int, default=50)
-    parser.add_argument('-cat_hyperbolic', action="store_const", const=True, default=False)
-    parser.add_argument("-loss", type=str, choices=['BCE', 'ASL', 'ASLO'], default='BCE')
-    parser.add_argument("-asl_config", type=str, default='0,0,0')
-    parser.add_argument("-asl_reduction", type=str, choices=['mean', 'sum'], default='sum')
+    parser.add_argument("--hyperbolic_dim", type=int, default=50)
+    parser.add_argument('--cat_hyperbolic', action="store_const", const=True, default=False)
+    parser.add_argument("--loss", type=str, choices=['BCE', 'ASL', 'ASLO'], default='BCE')
+    parser.add_argument("--asl_config", type=str, default='1,0,0.05')
+    parser.add_argument("--asl_reduction", type=str, choices=['mean', 'sum'], default='sum')
 
     sub_parsers = parser.add_subparsers()
 
