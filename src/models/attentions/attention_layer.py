@@ -152,8 +152,8 @@ class Decoder(nn.Module):
         self.decoder_dict = nn.ModuleDict()
         for i in range(len(Y)):
             y = Y[i]
-            self.decoder_dict[str(i) + '_' + '0'] = nn.Linear(input_size, y)
-            self.decoder_dict[str(i) + '_' + '1'] = nn.Linear(input_size, y)
+            self.decoder_dict[str(i) + '_' + '0'] = nn.Linear(args.d_a, y)
+            self.decoder_dict[str(i) + '_' + '1'] = nn.Linear(args.d_a, y)
             xavier_uniform(self.decoder_dict[str(i) + '_' + '0'].weight)
             xavier_uniform(self.decoder_dict[str(i) + '_' + '1'].weight)
         
@@ -163,7 +163,7 @@ class Decoder(nn.Module):
             if not self.cat_hyperbolic:
                 self.hyperbolic_fc_dict = nn.ModuleDict()
                 for i in range(len(Y)):
-                    self.hyperbolic_fc_dict[str(i)] = nn.Linear(args.hyperbolic_dim, input_size)
+                    self.hyperbolic_fc_dict[str(i)] = nn.Linear(args.hyperbolic_dim, args.d_a)
             else:
                 self.query_fc_dict = nn.ModuleDict()
                 for i in range(len(Y)):
@@ -180,6 +180,9 @@ class Decoder(nn.Module):
         self.cur_depth = 5 - args.depth
         self.is_init = False
         self.change_depth(self.cur_depth)
+
+        self.W = nn.Linear(input_size, args.d_a)
+        xavier_uniform(self.W.weight)
 
         # if args.loss == 'BCE':
         #     self.loss_function = nn.BCEWithLogitsLoss()
@@ -211,6 +214,7 @@ class Decoder(nn.Module):
         self.cur_depth = depth
         
     def forward(self, x):
+        z = torch.tanh(self.W(x))
         # attention
         if self.use_hyperbolic:
             if not self.cat_hyperbolic:
@@ -221,8 +225,8 @@ class Decoder(nn.Module):
         else:
             query = self.decoder_dict[str(self.cur_depth) + '_' + '0'].weight
 
-        alpha = F.softmax(query.matmul(x.transpose(1, 2)), dim=2)
-        m = alpha.matmul(x)
+        alpha = F.softmax(query.matmul(z.transpose(1, 2)), dim=2)
+        m = alpha.matmul(z)
 
         y = self.decoder_dict[str(self.cur_depth) + '_' + '1'].weight.mul(m).sum(dim=2).add(self.decoder_dict[str(self.cur_depth) + '_' + '1'].bias)
 
