@@ -178,7 +178,7 @@ def _train_model(train_data, valid_data, test_data,
         elif args.loss == "ASL":
             asl_config = [float(c) for c in args.asl_config.split(',')]
             criterions = [AsymmetricLoss(gamma_neg=asl_config[0], gamma_pos=asl_config[1],
-                                         clip=asl_config[2], reduction=args.asl_reduction)]
+                                         clip=asl_config[2], reduction=args.asl_reduction) for _ in range(vocab.n_level())]
     else:
         criterions = [nn.CrossEntropyLoss() for _ in range(vocab.n_level())]
 
