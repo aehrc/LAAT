@@ -135,3 +135,97 @@ class AttentionLayer(nn.Module):
         :return: regularized value
         """
         return torch.sum(torch.sum(torch.sum(m ** 2, 1), 1) ** 0.5)
+
+
+from torch.nn.init import xavier_uniform_ as xavier_uniform
+import numpy as np
+# hicu decoder
+class Decoder(nn.Module):
+    """
+    HiCu Decoder: knowledge transfer initialization and hyperbolic embedding correction
+    """
+    def __init__(self, args, input_size, Y, dicts):
+        super(Decoder, self).__init__()
+
+        self.dicts = dicts
+
+        self.decoder_dict = nn.ModuleDict()
+        for i in range(len(Y)):
+            y = Y[i]
+            self.decoder_dict[str(i) + '_' + '0'] = nn.Linear(input_size, y)
+            self.decoder_dict[str(i) + '_' + '1'] = nn.Linear(input_size, y)
+            xavier_uniform(self.decoder_dict[str(i) + '_' + '0'].weight)
+            xavier_uniform(self.decoder_dict[str(i) + '_' + '1'].weight)
+        
+        self.use_hyperbolic =  args.decoder.find("Hyperbolic") != -1
+        if self.use_hyperbolic:
+            self.cat_hyperbolic = args.cat_hyperbolic
+            if not self.cat_hyperbolic:
+                self.hyperbolic_fc_dict = nn.ModuleDict()
+                for i in range(len(Y)):
+                    self.hyperbolic_fc_dict[str(i)] = nn.Linear(args.hyperbolic_dim, input_size)
+            else:
+                self.query_fc_dict = nn.ModuleDict()
+                for i in range(len(Y)):
+                    self.query_fc_dict[str(i)] = nn.Linear(input_size + args.hyperbolic_dim, input_size)
+            
+            # build hyperbolic embedding matrix
+            self.hyperbolic_emb_dict = {}
+            for i in range(len(Y)):
+                self.hyperbolic_emb_dict[i] = np.zeros((Y[i], args.hyperbolic_dim))
+                for idx, code in dicts.index2label[i].items():
+                    self.hyperbolic_emb_dict[i][idx, :] = np.copy(dicts.poincare_embeddings.get_vector(code))
+                self.register_buffer(name='hb_emb_' + str(i), tensor=torch.tensor(self.hyperbolic_emb_dict[i], dtype=torch.float32))
+
+        self.cur_depth = 5 - args.depth
+        self.is_init = False
+        self.change_depth(self.cur_depth)
+
+        # if args.loss == 'BCE':
+        #     self.loss_function = nn.BCEWithLogitsLoss()
+        # elif args.loss == 'ASL':
+        #     asl_config = [float(c) for c in args.asl_config.split(',')]
+        #     self.loss_function = AsymmetricLoss(gamma_neg=asl_config[0], gamma_pos=asl_config[1],
+        #                                         clip=asl_config[2], reduction=args.asl_reduction)
+        # elif args.loss == 'ASLO':
+        #     asl_config = [float(c) for c in args.asl_config.split(',')]
+        #     self.loss_function = AsymmetricLossOptimized(gamma_neg=asl_config[0], gamma_pos=asl_config[1],
+        #                                                  clip=asl_config[2], reduction=args.asl_reduction)
+    
+    def change_depth(self, depth=0):
+        if self.is_init:
+            # copy previous attention weights to current attention network based on ICD hierarchy
+            ind2c = self.dicts.index2label
+            c2ind = self.dicts.label2index
+            hierarchy_dist = self.dicts.hierarchy
+            for i, code in ind2c[depth].items():
+                tree = hierarchy_dist[depth][code]
+                pre_idx = c2ind[depth - 1][tree[depth - 1]]
+
+                self.decoder_dict[str(depth) + '_' + '0'].weight.data[i, :] = self.decoder_dict[str(depth - 1) + '_' + '0'].weight.data[pre_idx, :].clone()
+                self.decoder_dict[str(depth) + '_' + '1'].weight.data[i, :] = self.decoder_dict[str(depth - 1) + '_' + '1'].weight.data[pre_idx, :].clone()
+
+        if not self.is_init:
+            self.is_init = True
+
+        self.cur_depth = depth
+        
+    def forward(self, x):
+        # attention
+        if self.use_hyperbolic:
+            if not self.cat_hyperbolic:
+                query = self.decoder_dict[str(self.cur_depth) + '_' + '0'].weight + self.hyperbolic_fc_dict[str(self.cur_depth)](self._buffers['hb_emb_' + str(self.cur_depth)])
+            else:
+                query = torch.cat([self.decoder_dict[str(self.cur_depth) + '_' + '0'].weight, self._buffers['hb_emb_' + str(self.cur_depth)]], dim=1)
+                query = self.query_fc_dict[str(self.cur_depth)](query)
+        else:
+            query = self.decoder_dict[str(self.cur_depth) + '_' + '0'].weight
+
+        alpha = F.softmax(query.matmul(x.transpose(1, 2)), dim=2)
+        m = alpha.matmul(x)
+
+        y = self.decoder_dict[str(self.cur_depth) + '_' + '1'].weight.mul(m).sum(dim=2).add(self.decoder_dict[str(self.cur_depth) + '_' + '1'].bias)
+
+        # loss = self.loss_function(y, target)
+        
+        return y, alpha

@@ -4,14 +4,17 @@ from src.util.preprocessing import *
 from src.util.util import to_md5
 from src.util.util import get_n_training_labels
 
-from src.data_helpers.dataloaders import TextDataset, TextDataLoader
+from src.data_helpers.dataloaders import TextDataset, TextDataLoader, HiCuTextDataset
 from src.trainer import Trainer
 from src.evaluator import Evaluator
+from src.util.icd_hierarchy import generate_code_hierarchy
 from src.args_parser import *
 import pickle
 import pprint
 
 from transformers import AdamW
+
+from gensim.models.poincare import PoincareModel
 
 
 def _load_and_cache_data(train_data, valid_data, test_data, vocab, args, logger, saved_data_file_path):
@@ -47,22 +50,40 @@ def _load_and_cache_data(train_data, valid_data, test_data, vocab, args, logger,
             pass
 
     # Build train/valid/test data loaders
-    train_dataset = TextDataset(train_data, vocab,
+    if args.joint_mode == "hicu":
+        train_dataset = HiCuTextDataset(train_data, vocab,
+                                    max_seq_length=args.max_seq_length,
+                                    min_seq_length=args.min_seq_length,
+                                    sort=True,
+                                    multilabel=args.multilabel)
+
+        valid_dataset = HiCuTextDataset(valid_data, vocab,
+                                    max_seq_length=args.max_seq_length,
+                                    min_seq_length=args.min_seq_length,
+                                    sort=True,
+                                    multilabel=args.multilabel)
+
+        test_dataset = HiCuTextDataset(test_data, vocab,
                                 max_seq_length=args.max_seq_length,
                                 min_seq_length=args.min_seq_length,
-                                sort=True,
-                                multilabel=args.multilabel)
+                                sort=True, multilabel=args.multilabel)
+    else:
+        train_dataset = TextDataset(train_data, vocab,
+                                    max_seq_length=args.max_seq_length,
+                                    min_seq_length=args.min_seq_length,
+                                    sort=True,
+                                    multilabel=args.multilabel)
 
-    valid_dataset = TextDataset(valid_data, vocab,
+        valid_dataset = TextDataset(valid_data, vocab,
+                                    max_seq_length=args.max_seq_length,
+                                    min_seq_length=args.min_seq_length,
+                                    sort=True,
+                                    multilabel=args.multilabel)
+
+        test_dataset = TextDataset(test_data, vocab,
                                 max_seq_length=args.max_seq_length,
                                 min_seq_length=args.min_seq_length,
-                                sort=True,
-                                multilabel=args.multilabel)
-
-    test_dataset = TextDataset(test_data, vocab,
-                               max_seq_length=args.max_seq_length,
-                               min_seq_length=args.min_seq_length,
-                               sort=True, multilabel=args.multilabel)
+                                sort=True, multilabel=args.multilabel)
     # try:
     with open(saved_data_file_path, 'wb') as f:
         data = {"train": train_dataset, "valid": valid_dataset, "test": test_dataset}
@@ -171,7 +192,7 @@ def _train_model(train_data, valid_data, test_data,
     evaluator = Evaluator(model=best_model,
                           vocab=vocab,
                           criterions=criterions,
-                          n_training_labels=get_n_training_labels(train_dataloader))
+                          n_training_labels=get_n_training_labels(train_dataloader)[-1])
 
     del model, lr_plateau, optimiser, evaluator, trainer, criterions
     return best_model, scores  # either on valid or test
@@ -303,6 +324,26 @@ def prepare_data():
         vocab, training_data, valid_data, test_data = load_cached_data(cached_file_name)
         data = training_data + valid_data + test_data
         labels = _get_labels(data, args)
+
+        # generate hierarchy for ICD codes
+        if args.joint_mode == "hicu":
+            labels, hierarchy = generate_code_hierarchy(labels[0])
+            
+            poincare_embeddings = None
+            if args.decoder.find("Hyperbolic") != -1:
+                # train poincare (hyperbolic) embeddings
+                relations = set()
+                for k, v in hierarchy[4].items():
+                    relations.add(('root', v[0]))
+                    for i in range(4):
+                        relations.add(tuple(v[i:i+2]))
+                relations = list(relations)
+                poincare = PoincareModel(relations, args.hyperbolic_dim, negative=10)
+                poincare.train(epochs=50)
+                poincare_embeddings = poincare.kv
+
+            vocab.update_hierarchy(hierarchy, poincare_embeddings)
+
         vocab.update_labels(labels)
         logger.info("Loaded vocab and data from file")
 
@@ -317,11 +358,31 @@ def prepare_data():
 
         labels = _get_labels(data, args)
 
+        # generate hierarchy for ICD codes
+        if args.joint_mode == "hicu":
+            labels, hierarchy = generate_code_hierarchy(labels[0])
+
         # Prepare the vocabulary
         vocab = Vocab(data, labels,
                       min_word_frequency=args.min_word_frequency,
                       word_embedding_mode=embedding_mode,
                       word_embedding_file=embedding_file)
+
+        if args.joint_mode == "hicu":
+            poincare_embeddings = None
+            if args.decoder.find("Hyperbolic") != -1:
+                # train poincare (hyperbolic) embeddings
+                relations = set()
+                for k, v in hierarchy[4].items():
+                    relations.add(('root', v[0]))
+                    for i in range(4):
+                        relations.add(tuple(v[i:i+2]))
+                relations = list(relations)
+                poincare = PoincareModel(relations, args.hyperbolic_dim, negative=10)
+                poincare.train(epochs=50)
+                poincare_embeddings = poincare.kv
+
+            vocab.update_hierarchy(hierarchy, poincare_embeddings)
 
         logger.info("Preparing the vocab")
         vocab.prepare_vocab()

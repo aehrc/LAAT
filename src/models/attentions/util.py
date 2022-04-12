@@ -25,6 +25,8 @@ def init_attention_layer(model):
             projection_linears.append(nn.Linear(model.vocab.n_labels(level), model.level_projection_size, bias=False))
         model.linears = nn.ModuleList(linears)
         model.projection_linears = nn.ModuleList(projection_linears)
+    elif model.args.joint_mode == "hicu":
+        model.attention = Decoder(args=model.args, input_size=model.output_size, Y=model.vocab.all_n_labels(), dicts=model.vocab)
     else:
         raise NotImplementedError
     if model.attention_mode is not None:
@@ -93,4 +95,8 @@ def perform_attention(model, all_output, last_output):
                 output = model.linears[level](output)
                 weighted_outputs.append(output)
                 previous_level_projection = model.projection_linears[level](torch.softmax(output, 1))
+    elif model.args.joint_mode == "hicu":
+        weighted_output, attention_weight = model.attention(all_output)
+        weighted_outputs = [weighted_output]
+        attention_weights = [attention_weight]
     return weighted_outputs, attention_weights

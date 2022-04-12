@@ -1,3 +1,6 @@
+import sys
+sys.path.append("c:\\Users\\micha\\Desktop\\LAAT")
+
 from src.training import *
 import os
 from src.util.util import set_random_seed
@@ -13,7 +16,7 @@ def generate_checkpoint_dir_path(args):
     del cp_args.n_epoch, cp_args.patience, cp_args.save_results, cp_args.save_best_model, cp_args.save_results_on_train
     del cp_args.resume_training, cp_args.problem_name, cp_args.metric_level, cp_args.main_metric
 
-    checkpoint_dir_path = "checkpoints/{}/{}".format(args.problem_name,
+    checkpoint_dir_path = "{}/{}/{}".format(args.checkpoint_dir, args.problem_name,
                                                      "{}_{}".format(model_setting, to_md5("{}".format(cp_args))))
     return checkpoint_dir_path
 

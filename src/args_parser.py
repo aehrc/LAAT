@@ -1,4 +1,5 @@
 import argparse
+from email.policy import default
 from src.models.rnn import *
 from src.models.cnn import *
 
@@ -7,9 +8,11 @@ def create_args_parser():
     parser = argparse.ArgumentParser(description="DNN for Text Classifications")
     parser.add_argument("--problem_name", type=str, default="mimic-iii_single_full", required=False,
                         help="The problem name is used to load the configuration from config.json")
+    
+    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
 
     parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument("--n_epoch", type=int, default=50)
+    parser.add_argument("--n_epoch", type=str, default="2,3,5,10,50")
     parser.add_argument("--patience", type=int, default=5, help="Early Stopping")
 
     parser.add_argument("--optimiser", type=str, choices=["adagrad", "adam", "sgd", "adadelta", "adamw"],
@@ -24,7 +27,7 @@ def create_args_parser():
     parser.add_argument("--lr_scheduler_patience", type=int, default=5,
                         help="The lr scheduler patience")
 
-    parser.add_argument("--joint_mode", type=str, choices=["flat", "hierarchical"], default="hierarchical")
+    parser.add_argument("--joint_mode", type=str, choices=["flat", "hierarchical", "hicu"], default="hierarchical")
     parser.add_argument("--level_projection_size", type=int, default=128)
 
     parser.add_argument("--main_metric", default="micro_f1",
@@ -75,6 +78,16 @@ def create_args_parser():
     parser.add_argument("--r", type=int, help="The number of hops for self attention", default=-1)
     parser.add_argument("--use_regularisation", action='store_true', default=False)
     parser.add_argument("--penalisation_coeff", type=float, default=0.01)
+
+    # HiCu
+    parser.add_argument("-depth", type=int, default=5)
+    parser.add_argument("-decoder", type=str, choices=['HierarchicalHyperbolic', 'CodeTitleHierarchicalHyperbolic', 'Hierarchical',
+                                                   'CodeTitle', 'RandomlyInitialized'], default='HierarchicalHyperbolic')
+    parser.add_argument("-hyperbolic_dim", type=int, default=50)
+    parser.add_argument('-cat_hyperbolic', action="store_const", const=True, default=False)
+    parser.add_argument("-loss", type=str, choices=['BCE', 'ASL', 'ASLO'], default='BCE')
+    parser.add_argument("-asl_config", type=str, default='0,0,0')
+    parser.add_argument("-asl_reduction", type=str, choices=['mean', 'sum'], default='sum')
 
     sub_parsers = parser.add_subparsers()
 

@@ -92,8 +92,8 @@ class Trainer:
         if bool(self.args.shuffle_data):
             self.train_dataloader.dataset.shuffle_data()
         losses = []
-        true_labels = [[] for _ in range(self.vocab.n_level())]
-        pred_probs = [[] for _ in range(self.vocab.n_level())]
+        true_labels = [[] for _ in range(self.vocab.n_level())] if self.args.joint_mode != "hicu" else [[]]
+        pred_probs = [[] for _ in range(self.vocab.n_level())] if self.args.joint_mode != "hicu" else [[]]
         ids = []
         all_loss_list = []
         progress_bar = tqdm(self.train_dataloader, unit="batches", desc="Training at epoch #{}".format(index))
@@ -116,48 +116,93 @@ class Trainer:
             output, attn_weights = self.model(text_batch, length_batch)
             loss_list = []
 
-            for level in range(len(output)):
-                level_labels = label_batch[level]
-                true_labels[level].extend(level_labels.cpu().numpy())
-                loss_list.append(self.criterions[level](output[level], level_labels))
+            if self.args.joint_mode != "hicu":
+                for level in range(len(output)):
+                    level_labels = label_batch[level]
+                    true_labels[level].extend(level_labels.cpu().numpy())
+                    loss_list.append(self.criterions[level](output[level], level_labels))
 
-            for level in range(len(loss_list)):
-                if len(all_loss_list) < len(loss_list):
-                    all_loss_list.append([loss_list[level].item()])
-                else:
-                    all_loss_list[level].append(loss_list[level].item())
+                for level in range(len(loss_list)):
+                    if len(all_loss_list) < len(loss_list):
+                        all_loss_list.append([loss_list[level].item()])
+                    else:
+                        all_loss_list[level].append(loss_list[level].item())
 
-            ids.extend(id_batch)
-            for level in range(len(output)):
-                if self.multilabel:
-                    output[level] = torch.sigmoid(output[level])
-                    output[level] = output[level].detach().cpu().numpy()
-                    pred_probs[level].extend(output[level])
-                else:
-                    output[level] = torch.softmax(output[level], 1)
-                    output[level] = output[level].detach().cpu().numpy()
-                    pred_probs[level].extend(output[level].tolist())
-            loss = get_loss(loss_list, self.n_training_labels)
-            loss.backward()
-            losses.append(loss.item())
+                ids.extend(id_batch)
+                for level in range(len(output)):
+                    if self.multilabel:
+                        output[level] = torch.sigmoid(output[level])
+                        output[level] = output[level].detach().cpu().numpy()
+                        pred_probs[level].extend(output[level])
+                    else:
+                        output[level] = torch.softmax(output[level], 1)
+                        output[level] = output[level].detach().cpu().numpy()
+                        pred_probs[level].extend(output[level].tolist())
+                loss = get_loss(loss_list, self.n_training_labels)
+                loss.backward()
+                losses.append(loss.item())
 
-            self.optimiser.step()
-            self.optimiser.zero_grad()
+                self.optimiser.step()
+                self.optimiser.zero_grad()
+            else:
+                level_labels = label_batch[self.cur_depth]
+                true_labels[0].extend(level_labels.cpu().numpy())
+                loss_list.append(self.criterions[self.cur_depth](output[0], level_labels))
+
+                for level in range(len(loss_list)):
+                    if len(all_loss_list) < len(loss_list):
+                        all_loss_list.append([loss_list[level].item()])
+                    else:
+                        all_loss_list[level].append(loss_list[level].item())
+
+                ids.extend(id_batch)
+                for level in range(len(output)):
+                    if self.multilabel:
+                        output[level] = torch.sigmoid(output[level])
+                        output[level] = output[level].detach().cpu().numpy()
+                        pred_probs[level].extend(output[level])
+                    else:
+                        output[level] = torch.softmax(output[level], 1)
+                        output[level] = output[level].detach().cpu().numpy()
+                        pred_probs[level].extend(output[level].tolist())
+                loss = get_loss(loss_list, [self.n_training_labels[self.cur_depth]])
+                loss.backward()
+                losses.append(loss.item())
+
+                self.optimiser.step()
+                self.optimiser.zero_grad()
+
 
         scores = OrderedDict()
-        for level in range(len(output)):
-            if self.args.save_results_on_train:
-                scores["level_{}".format(level)] = calculate_eval_metrics(ids, true_labels[level],
-                                                                          pred_probs[level], self.multilabel)
-            else:
-                scores["level_{}".format(level)] = {}
-            scores["level_{}".format(level)]["loss"] = -np.mean(all_loss_list[level]).item()
+        if self.args.joint_mode != "hicu":
+            for level in range(len(output)):
+                if self.args.save_results_on_train:
+                    scores["level_{}".format(level)] = calculate_eval_metrics(ids, true_labels[level],
+                                                                            pred_probs[level], self.multilabel)
+                else:
+                    scores["level_{}".format(level)] = {}
+                scores["level_{}".format(level)]["loss"] = -np.mean(all_loss_list[level]).item()
 
-        scores["average"] = average_scores(scores)
-        scores["average"]["loss"] = np.mean(losses).item()
-        progress_bar.refresh(True)
-        progress_bar.clear(True)
-        progress_bar.close()
+            scores["average"] = average_scores(scores)
+            scores["average"]["loss"] = np.mean(losses).item()
+            progress_bar.refresh(True)
+            progress_bar.clear(True)
+            progress_bar.close()
+
+        else:
+            for level in range(len(output)):
+                if self.args.save_results_on_train:
+                    scores["level_{}".format(self.cur_depth)] = calculate_eval_metrics(ids, true_labels[level],
+                                                                            pred_probs[level], self.multilabel)
+                else:
+                    scores["level_{}".format(self.cur_depth)] = {}
+                scores["level_{}".format(self.cur_depth)]["loss"] = -np.mean(all_loss_list[level]).item()
+
+            scores["average"] = average_scores(scores)
+            scores["average"]["loss"] = np.mean(losses).item()
+            progress_bar.refresh(True)
+            progress_bar.clear(True)
+            progress_bar.close()
 
         return scores
 
@@ -185,8 +230,9 @@ class Trainer:
         return abs(round(number, ndigits=ndigits))
 
     def train(self,
-              n_epoch: int = 100,
+              n_epoch,
               patience: int = 5):
+        
 
         if self.args.resume_training:
             if os.path.isfile(self.checkpoint_path):
@@ -205,87 +251,103 @@ class Trainer:
             else:
                 self.logger.info("=> no checkpoint found at '{}'".format(self.checkpoint_path))
 
-        best_valid_scores = self.best_val
-        saved_test_scores = self.saved_test_scores
-        saved_train_scores = None
-        check_to_stop = 0
-        best_epoch_num = self.best_epoch_num
-        # best_state_dict = None
-        evaluator = Evaluator(self.model, self.vocab, self.criterions, self.n_training_labels)
-        for e in range(self.start_epoch + 1, n_epoch + 1):
-            self.logger.info("Training epoch #{}".format(e))
-            train_scores = self.train_single_epoch(e)
-            epoch_loss = train_scores["average"]["loss"]
+        self.cur_depth = 5 - self.args.depth
 
-            valid_scores = evaluator.evaluate(self.valid_dataloader)
-            test_scores = evaluator.evaluate(self.test_dataloader)
+        n_epoch = [int(epoch) for epoch in n_epoch.split(",")]
 
-            if self.lr_scheduler is not None:
-                self.lr_scheduler.step(valid_scores[self.metric_level][self.main_metric])
-                for param_group in self.optimiser.param_groups:
-                    self.logger.info("Learning rate at epoch #{}: {}".format(e, param_group["lr"]))
+        while self.cur_depth < 5:
 
-            if self.args.save_results_on_train:
-                self.logger.info("Loss on Train at epoch #{}: {}, {} on Train: {}, {} on Valid: {}".
-                                 format(e, self.format_number(epoch_loss)),
-                                        self.main_metric,
-                                        self.format_number(train_scores[self.metric_level][self.main_metric]),
-                                        self.main_metric,
-                                        self.format_number(valid_scores[self.metric_level][self.main_metric]))
-            else:
-                self.logger.info("Loss on Train at epoch #{}: {}, {} on Valid: {}".
-                                 format(e, abs(round(epoch_loss, ndigits=ndigits)),
-                                        self.main_metric,
-                                        abs(round(valid_scores[self.metric_level][self.main_metric], ndigits=ndigits))))
+            print("Training model at depth {}:".format(self.cur_depth))
+            if self.cur_depth != 0:
+                self.model.attention.change_depth(self.cur_depth)
 
-            is_best = False
-            if best_valid_scores is None or best_valid_scores[self.metric_level][self.main_metric] < \
-                    valid_scores[self.metric_level][self.main_metric]:
-                check_to_stop = 0
-                best_valid_scores = valid_scores
-                saved_test_scores = test_scores
-                saved_train_scores = train_scores
-                best_epoch_num = e
-                if self.save_best_model:
-                    is_best = True
+            best_valid_scores = self.best_val
+            saved_test_scores = self.saved_test_scores
+            saved_train_scores = None
+            check_to_stop = 0
+            best_epoch_num = self.best_epoch_num
+            # best_state_dict = None
+            evaluator = Evaluator(self.model, self.vocab, [self.criterions[self.cur_depth]], [self.n_training_labels[self.cur_depth]])
+            for e in range(self.start_epoch + 1, n_epoch[self.cur_depth] + 1):
+                self.logger.info("Training epoch #{}".format(e))
+                train_scores = self.train_single_epoch(e)
+                epoch_loss = train_scores["average"]["loss"]
 
-            else:
-                check_to_stop += 1
-                self.logger.info("[CURRENT BEST] ({}) {} on Valid set: {}"
-                                 .format(self.metric_level,
-                                         self.main_metric,
-                                         self.format_number(best_valid_scores[self.metric_level][self.main_metric]),
-                                         ))
-                self.logger.info("Early stopping: {}/{}".format(check_to_stop, patience + 1))
+                if self.model.args.joint_mode != "hicu":
+                    valid_scores = evaluator.evaluate(self.valid_dataloader)
+                    test_scores = evaluator.evaluate(self.test_dataloader)
+                else:
+                    valid_scores = evaluator.evaluate(self.valid_dataloader, self.cur_depth)
+                    test_scores = evaluator.evaluate(self.test_dataloader, self.cur_depth)
 
-            if check_to_stop == 0:
-                self.logger.info("[NEW BEST] ({}) {} on Valid set: {}"
-                                 .format(self.metric_level,
-                                         self.main_metric,
-                                         self.format_number(best_valid_scores[self.metric_level][self.main_metric]),
-                                         ))
-                log_scores(valid_scores, self.logger, e, "Valid set")
+                if self.lr_scheduler is not None and self.cur_depth == 4:
+                    self.lr_scheduler.step(valid_scores[self.metric_level][self.main_metric])
+                    for param_group in self.optimiser.param_groups:
+                        self.logger.info("Learning rate at epoch #{}: {}".format(e, param_group["lr"]))
 
-            # log_scores(test_scores, self.logger, e, "Test set")
+                if self.args.save_results_on_train:
+                    self.logger.info("Loss on Train at epoch #{}: {}, {} on Train: {}, {} on Valid: {}".
+                                    format(e, self.format_number(epoch_loss),
+                                            self.main_metric,
+                                            self.format_number(train_scores[self.metric_level][self.main_metric]),
+                                            self.main_metric,
+                                            self.format_number(valid_scores[self.metric_level][self.main_metric])))
+                else:
+                    self.logger.info("Loss on Train at epoch #{}: {}, {} on Valid: {}".
+                                    format(e, abs(round(epoch_loss, ndigits=ndigits)),
+                                            self.main_metric,
+                                            abs(round(valid_scores[self.metric_level][self.main_metric], ndigits=ndigits))))
 
-            # Checkpoint save
-            lr_scheduler_state_dict = None
-            if self.lr_scheduler is not None:
-                lr_scheduler_state_dict = self.lr_scheduler.state_dict()
+                is_best = False
+                if best_valid_scores is None or best_valid_scores[self.metric_level][self.main_metric] < \
+                        valid_scores[self.metric_level][self.main_metric]:
+                    check_to_stop = 0
+                    best_valid_scores = valid_scores
+                    saved_test_scores = test_scores
+                    saved_train_scores = train_scores
+                    best_epoch_num = e
+                    if self.save_best_model:
+                        is_best = True
 
-            self.save_checkpoint({
-                'epoch': e,
-                'state_dict': self.model.state_dict(),
-                'best_val': best_valid_scores,
-                'test_scores': saved_test_scores,
-                'optimiser': self.optimiser.state_dict(),
-                'best_epoch_num': best_epoch_num,
-                'lr_scheduler': lr_scheduler_state_dict
-            }, is_best)
+                else:
+                    check_to_stop += 1
+                    self.logger.info("[CURRENT BEST] ({}) {} on Valid set: {}"
+                                    .format(self.metric_level,
+                                            self.main_metric,
+                                            self.format_number(best_valid_scores[self.metric_level][self.main_metric]),
+                                            ))
+                    self.logger.info("Early stopping: {}/{}".format(check_to_stop, patience + 1))
 
-            if check_to_stop > patience > 0:
-                self.logger.warn("Early stopped on Valid set!")
-                break
+                if check_to_stop == 0:
+                    self.logger.info("[NEW BEST] ({}) {} on Valid set: {}"
+                                    .format(self.metric_level,
+                                            self.main_metric,
+                                            self.format_number(best_valid_scores[self.metric_level][self.main_metric]),
+                                            ))
+                    log_scores(valid_scores, self.logger, e, "Valid set")
+
+                # log_scores(test_scores, self.logger, e, "Test set")
+
+                # Checkpoint save
+                lr_scheduler_state_dict = None
+                if self.lr_scheduler is not None:
+                    lr_scheduler_state_dict = self.lr_scheduler.state_dict()
+
+                self.save_checkpoint({
+                    'epoch': e,
+                    'state_dict': self.model.state_dict(),
+                    'best_val': best_valid_scores,
+                    'test_scores': saved_test_scores,
+                    'optimiser': self.optimiser.state_dict(),
+                    'best_epoch_num': best_epoch_num,
+                    'lr_scheduler': lr_scheduler_state_dict
+                }, is_best)
+
+                if check_to_stop > patience > 0:
+                    self.logger.warn("Early stopped on Valid set!")
+                    break
+
+            self.cur_depth += 1
 
         self.logger.info("=================== BEST ===================")
         # log_scores(saved_train_scores, self.logger, best_epoch_num, "Training set")

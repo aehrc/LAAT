@@ -111,6 +111,11 @@ class Vocab(object):
             self.index2label.append({idx: label for idx, label in enumerate(all_labels)})
             self.all_labels.append(all_labels)
 
+    def update_hierarchy(self, hierarchy, poincare=None):
+        self.hierarchy = hierarchy
+        if poincare is not None:
+            self.poincare_embeddings = poincare
+
     def _load_embeddings(self):
         if self.word_embedding_file is None:
             return None
