@@ -148,12 +148,18 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.dicts = dicts
+        self.args = args
+
+        if not args.disable_attention_linear:
+            self.d_a = args.d_a
+        else:
+            self.d_a = input_size
 
         self.decoder_dict = nn.ModuleDict()
         for i in range(len(Y)):
             y = Y[i]
-            self.decoder_dict[str(i) + '_' + '0'] = nn.Linear(args.d_a, y)
-            self.decoder_dict[str(i) + '_' + '1'] = nn.Linear(args.d_a, y)
+            self.decoder_dict[str(i) + '_' + '0'] = nn.Linear(self.d_a, y)
+            self.decoder_dict[str(i) + '_' + '1'] = nn.Linear(self.d_a, y)
             xavier_uniform(self.decoder_dict[str(i) + '_' + '0'].weight)
             xavier_uniform(self.decoder_dict[str(i) + '_' + '1'].weight)
         
@@ -163,11 +169,11 @@ class Decoder(nn.Module):
             if not self.cat_hyperbolic:
                 self.hyperbolic_fc_dict = nn.ModuleDict()
                 for i in range(len(Y)):
-                    self.hyperbolic_fc_dict[str(i)] = nn.Linear(args.hyperbolic_dim, args.d_a)
+                    self.hyperbolic_fc_dict[str(i)] = nn.Linear(args.hyperbolic_dim, self.d_a)
             else:
                 self.query_fc_dict = nn.ModuleDict()
                 for i in range(len(Y)):
-                    self.query_fc_dict[str(i)] = nn.Linear(args.d_a + args.hyperbolic_dim, args.d_a)
+                    self.query_fc_dict[str(i)] = nn.Linear(self.d_a + args.hyperbolic_dim, self.d_a)
             
             # build hyperbolic embedding matrix
             self.hyperbolic_emb_dict = {}
@@ -181,8 +187,9 @@ class Decoder(nn.Module):
         self.is_init = False
         self.change_depth(self.cur_depth)
 
-        self.W = nn.Linear(input_size, args.d_a)
-        xavier_uniform(self.W.weight)
+        if not args.disable_attention_linear:
+            self.W = nn.Linear(input_size, self.d_a)
+            xavier_uniform(self.W.weight)
 
         # if args.loss == 'BCE':
         #     self.loss_function = nn.BCEWithLogitsLoss()
@@ -214,7 +221,10 @@ class Decoder(nn.Module):
         self.cur_depth = depth
         
     def forward(self, x):
-        z = torch.tanh(self.W(x))
+        if not self.args.disable_attention_linear:
+            z = torch.tanh(self.W(x))
+        else:
+            z = x
         # attention
         if self.use_hyperbolic:
             if not self.cat_hyperbolic:

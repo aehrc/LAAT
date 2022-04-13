@@ -88,6 +88,7 @@ def create_args_parser():
     parser.add_argument("--loss", type=str, choices=['BCE', 'ASL', 'ASLO'], default='BCE')
     parser.add_argument("--asl_config", type=str, default='1,0,0.05')
     parser.add_argument("--asl_reduction", type=str, choices=['mean', 'sum'], default='sum')
+    parser.add_argument('--disable_attention_linear', action="store_const", const=True, default=False)
 
     sub_parsers = parser.add_subparsers()
 
